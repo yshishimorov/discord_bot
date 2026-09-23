@@ -100,14 +100,14 @@ class CaptWinrate(commands.Cog):
                             embed = disnake.Embed(
                                 title=f"⚔️ {attackers_name} VS {defenders_name} 🛡️",
                                 color=disnake.Color.green() if winner == self.faraday_id else disnake.Color.red(),
-                                description=f"*{attackers_kills} убийств, {attackers_damage} урона   |   {defenders_kills} убийств, {defenders_damage} урона*"
+                                description=f"*{attackers_kills} убийств, {attackers_damage} урона VS {defenders_kills} убийств, {defenders_damage} урона*"
                             )
 
                             embed.add_field(name="Карта:", value=selected_map_name, inline=True) 
                             embed.add_field(name="Исход:", value=result, inline=True) 
                             embed.add_field(name="ID капта:", value=capt_id, inline=True) 
                             embed.add_field(name="ТОП-5 по убийствам:", value="\n".join(top_kills_list), inline=True)
-                            embed.add_field(name="ТОП-5 по убийствам:", value="\n".join(top_damage_list), inline=True)
+                            embed.add_field(name="ТОП-5 по урону:", value="\n".join(top_damage_list), inline=True)
                             embed.set_thumbnail(url='https://colt.family/uploads/servers/srv_1787421357047_qugdvp.png')
                             embed.set_footer(text=end_time)
                             await channel.send(embed=embed)
