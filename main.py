@@ -1,7 +1,7 @@
 import os
+import config
 import disnake
 from disnake.ext import commands
-import config
 
 intents = disnake.Intents.all()
 
