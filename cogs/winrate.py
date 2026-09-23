@@ -107,7 +107,7 @@ class CaptWinrate(commands.Cog):
                             embed.add_field(name="Исход:", value=result, inline=True) 
                             embed.add_field(name="ID капта:", value=capt_id, inline=True) 
                             embed.add_field(name="ТОП-5 по убийствам:", value="\n".join(top_kills_list), inline=True)
-                            embed.add_field(name="ТОП-5 по убийствам:", value="\n".join(top_damage_list), inline=True)
+                            embed.add_field(name="ТОП-5 по урону:", value="\n".join(top_damage_list), inline=True)
                             embed.set_thumbnail(url='https://colt.family/uploads/servers/srv_1787421357047_qugdvp.png')
                             embed.set_footer(text=end_time)
                             await channel.send(embed=embed)
