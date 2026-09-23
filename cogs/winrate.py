@@ -100,7 +100,7 @@ class CaptWinrate(commands.Cog):
                             embed = disnake.Embed(
                                 title=f"⚔️ {attackers_name} VS {defenders_name} 🛡️",
                                 color=disnake.Color.green() if winner == self.faraday_id else disnake.Color.red(),
-                                description=f"*{attackers_kills} убийств, {attackers_damage} урона   |   {defenders_kills} убийств, {defenders_damage} урона*"
+                                description=f"*{attackers_kills} убийств, {attackers_damage} урона VS {defenders_kills} убийств, {defenders_damage} урона*"
                             )
 
                             embed.add_field(name="Карта:", value=selected_map_name, inline=True) 
