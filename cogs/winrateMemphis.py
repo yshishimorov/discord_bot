@@ -7,7 +7,7 @@ from disnake.ext import commands, tasks
 from config import API_KEY
 
 FARADAY_ID = '20'
-CHANNEL_ID = 1538595492190224507
+CHANNEL_ID = 1549792168212963348
 URL = "https://api.majestic-files.net/v1/ext/family-wars/RU19"
 
 project_root = Path(__file__).resolve().parent.parent
