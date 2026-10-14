@@ -1,24 +1,34 @@
-import disnake
-from disnake.ext import commands, tasks
 import requests
-from datetime import datetime
+import disnake
+from datetime import datetime, timedelta
+from pathlib import Path
+from disnake import ui
+from disnake.ext import commands, tasks
+from config import API_KEY
 
-URL = "https://api.majestic-files.net/v1/ext/family-wars/MCL"
-KEY = "idURS2Fwm9oVdxu9ihlsbAFTOUaLHUT8dZ"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 FARADAY_ID = '6'
-CHANNEL_ID = 1549792168212963348
+CHANNEL_ID = 1538595492190224507
+URL = "https://api.majestic-files.net/v1/ext/family-wars/MCL"
+
+project_root = Path(__file__).resolve().parent.parent
+# images_path = project_root / "images"
 
 headers = {
-    "x-api-key": KEY,
-    "User-Agent": UA
+    "x-api-key": API_KEY,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
-class CaptWinrateMCL(commands.Cog):
-    def __init__(self, bot):
+
+# MAP_IMAGES = {
+#     "завод": "factory.webp",
+#     "порт": "port.webp",
+# }
+
+class WinrateMCL(commands.Cog):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.faraday_id = FARADAY_ID
-        self.processed_match_ids = set() 
+        self.processed_match_ids = set() # Айди уже обработанных каптов
 
         self.check_api_loop.start() # Запуск задачи на фоне при старте
 
@@ -27,8 +37,16 @@ class CaptWinrateMCL(commands.Cog):
 
     @tasks.loop(seconds=60)
     async def check_api_loop(self):
+
+        await self.bot.wait_until_ready() # Ждем полной загрузки бота
+
+        channel = self.bot.get_channel(CHANNEL_ID)
+        if not channel:
+            print(f'Канал с айди {CHANNEL_ID} не найден.')
+            return
+
         try:
-            response = requests.get(URL, headers=headers)
+            response = requests.get(URL, headers=headers, timeout=10)
 
             if response.status_code == 200:
                 data = response.json()
@@ -36,24 +54,31 @@ class CaptWinrateMCL(commands.Cog):
                 captures = result.get('captures')
 
                 for capt in captures:
-                    id = str(capt.get("id"))
+                    id = str(capt.get("id")) # Айди матча в API, не капта
 
                     if id not in self.processed_match_ids:
-                        self.processed_match_ids.add(id)
                         all_players = []
+                        self.processed_match_ids.add(id)
                         attackers_id = str(capt.get("attackersId"))
                         defenders_id = str(capt.get("defendersId"))
-                    
+                
                         if attackers_id == self.faraday_id or defenders_id == self.faraday_id:
-                            capt_id = capt.get('captureId')
                             attackers_name = str(capt.get("attackersName"))
                             defenders_name = str(capt.get("defendersName"))
                             attackers_id = str(capt.get("attackersId"))
                             defenders_id = str(capt.get("defendersId"))
                             winner = str(capt.get('winner'))
-                            end_time = datetime.fromisoformat(capt.get("endAt").replace("Z", "+00:00")).strftime("%d.%m.%Y. %H:%M")
+
                             selected_map_name = capt.get("selectedMapName")
                             players_dict = capt.get("players")
+                            capt_id = capt.get('captureId')
+
+                            # Время и дата в формате UTC+3
+                            utc_time = datetime.fromisoformat(capt.get("startAt").replace("Z", "+00:00"))
+                            msk_time = utc_time + timedelta(hours=3) 
+                            start_time = msk_time.strftime("%H:%M") 
+                            date = msk_time.strftime("%d.%m.%Y") 
+
                             result = 'Победа' if winner == self.faraday_id else 'Поражение'
                             enemy = defenders_name if attackers_name.lower() == 'faraday' else attackers_name
 
@@ -61,6 +86,8 @@ class CaptWinrateMCL(commands.Cog):
                             defenders_kills = 0
                             attackers_damage = 0
                             defenders_damage = 0
+                            attackers_count = 0
+                            defenders_count = 0
 
                             for family_id, players_list in players_dict.items():
                                 total_family_kills = sum(p.get("kills") for p in players_list)
@@ -69,10 +96,13 @@ class CaptWinrateMCL(commands.Cog):
                                 if str(family_id) == attackers_id:
                                     attackers_kills = total_family_kills
                                     attackers_damage = total_family_damage
-                                elif str(family_id) == defenders_id:
+                                    attackers_count = len(players_list)
+                                else:
                                     defenders_kills = total_family_kills
                                     defenders_damage = total_family_damage
+                                    defenders_count = len(players_list)
 
+                                # Статистика каждого игрока из семьи
                                 if family_id == self.faraday_id:
                                     for player in players_list:
                                         all_players.append(player)
@@ -83,43 +113,53 @@ class CaptWinrateMCL(commands.Cog):
                                         p_kills = player.get("kills")
                                         p_familyId = str(player.get('familyId'))
 
-                            top_damage = sorted(all_players, key=lambda x: x.get("damage"), reverse=True)[:5]
-                            top_kills = sorted(all_players, key=lambda x: x.get("kills"), reverse=True)[:5]
-
+                            # Формирование списка игроков по количеству убуийств
+                            top_kills = sorted(all_players, key=lambda x: x.get("kills"), reverse=True)
                             top_kills_list = []
                             for i, p in enumerate(top_kills, 1):
-                                line = f"{i}. {p.get('name')} #{p.get('id')} — {p.get('kills')} убийств"
+                                line = f"{i}. {p.get('name')} #{p.get('id')} — {p.get('kills')} убийств {p.get('damage')} урона"
                                 top_kills_list.append(line)
 
-                            top_damage_list = []
-                            for i, p in enumerate(top_damage, 1):
-                                line = f"{i}. {p.get('name')} #{p.get('id')} — {p.get('damage')} урона"
-                                top_damage_list.append(line)
+                            # file_to_send = disnake.File(images_path / 'sandy.webp', filename="sandy.webp")
+                            # attachment_url = "attachment://sandy.webp"
 
+                            # Отправка сообщения
                             channel = self.bot.get_channel(CHANNEL_ID)
-                            embed = disnake.Embed(
-                                title=f"⚔️ {attackers_name} VS {defenders_name} 🛡️",
-                                color=disnake.Color.green() if winner == self.faraday_id else disnake.Color.red(),
-                                description=f"*{attackers_kills} убийств, {attackers_damage} урона   |   {defenders_kills} убийств, {defenders_damage} урона*"
+                            await channel.send(
+                                # file=file_to_send, 
+                                components=[                 
+                                    ui.Container(
+                                        # ui.MediaGallery(disnake.MediaGalleryItem(attachment_url)),
+                                        ui.TextDisplay(f'# `⚔️`  {attackers_name}    VS    {defenders_name}  `🛡️`'),
+                                        ui.TextDisplay(f'-# *{attackers_kills} убийств, {attackers_damage} урона, {attackers_count} игроков              {defenders_kills} убийств, {defenders_damage} урона, {defenders_count} игроков*'),
+                                        ui.Separator(divider=False),
+                                        ui.Separator(divider=False),
+                                        ui.Separator(divider=True),
+                                        ui.Separator(divider=False),
+                                        ui.Separator(divider=False),
+                                        ui.TextDisplay(f'• **`🏆` Исход:** {result}'), 
+                                        ui.TextDisplay(f'• **`🗺️` Карта:** {selected_map_name}'), 
+                                        ui.TextDisplay(f'• **`🌐` Сервер:** MCL'),
+                                        ui.TextDisplay(f'• **`🗓️` Дата:** {date}'),
+                                        ui.TextDisplay(f'• **`🕐` Время начала:** {start_time}'),
+                                        accent_colour=disnake.Colour.green() if result == 'Победа' else disnake.Colour.red()
+                                    ),
+
+                                    ui.Container(
+                                        ui.TextDisplay('# `📄` Список игроков'),
+                                        ui.TextDisplay(f'```{"\n".join(top_kills_list)}```')
+                                    )
+                                ]
                             )
 
-                            embed.add_field(name="Карта:", value=selected_map_name, inline=True) 
-                            embed.add_field(name="Исход:", value=result, inline=True) 
-                            embed.add_field(name="ID капта:", value=capt_id, inline=True) 
-                            embed.add_field(name="ТОП-5 по убийствам:", value="\n".join(top_kills_list), inline=True)
-                            embed.add_field(name="ТОП-5 по урону:", value="\n".join(top_damage_list), inline=True)
-                            embed.set_footer(text=end_time)
-                            await channel.send(embed=embed)
-
             else:
-                print(response.status_code)
+                print(f'Ошибка API. Статус: {response.status_code}')
 
-        except Exception as e:
-            print(e)
+        except requests.exceptions.Timeout:
+            print("Превышено время ожидания ответа от API.")
 
-    @check_api_loop.before_loop
-    async def before_check_api_loop(self):
-        await self.bot.wait_until_ready()
+        except requests.exceptions.RequestException as e:
+            print(f'Проблема с подключением к API: {e}')
 
-def setup(bot):
-    bot.add_cog(CaptWinrateMCL(bot))
+def setup(bot: commands.Bot):
+    bot.add_cog(WinrateMCL(bot))

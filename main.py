@@ -9,7 +9,7 @@ bot = commands.Bot(command_prefix=config.PREFIX, intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Бот {bot.user} успешно запущен!")
+    print("Бот успешно запущен.")
 
 @bot.command()
 @commands.is_owner() # Только для владельца бота
