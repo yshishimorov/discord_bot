@@ -5,53 +5,66 @@ from pathlib import Path
 from disnake import ui
 from disnake.ext import commands, tasks
 from config import API_KEY
-
-FARADAY_ID = '6'
-CHANNEL_ID = 1549792168212963348
-URL = "https://api.majestic-files.net/v1/ext/family-wars/MCL"
-
-project_root = Path(__file__).resolve().parent.parent
-# images_path = project_root / "images"
+import config
 
 headers = {
     "x-api-key": API_KEY,
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
+project_root = Path(__file__).resolve().parent.parent
+images_path = project_root / "images"
 
-# MAP_IMAGES = {
-#     "завод": "factory.webp",
-#     "порт": "port.webp",
-# }
-
-class WinrateMCL(commands.Cog):
+class WinrateMemphis(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.faraday_id = FARADAY_ID
-        self.processed_match_ids = set() # Айди уже обработанных каптов
-
+        self.processed_match_ids = set() # Айди(API) уже обработанных каптов
         self.check_api_loop.start() # Запуск задачи на фоне при старте
 
-    def cog_unload(self): # Останавливаем задачу, если ког выгружается
+    # Останавливаем задачу, если ког выгружается
+    def cog_unload(self): 
         self.check_api_loop.cancel()
 
     @tasks.loop(seconds=60)
     async def check_api_loop(self):
-
         await self.bot.wait_until_ready() # Ждем полной загрузки бота
 
-        channel = self.bot.get_channel(CHANNEL_ID)
-        if not channel:
-            print(f'Канал с айди {CHANNEL_ID} не найден.')
+        # Перебираем данные для запроса
+        for conf in config.CONFIGS:
+            await self.process_api_data(conf)
+
+    # Размещение первой строки сообщения по центру
+    def centered_title(self, attackers_name, defenders_name):
+        max_len = 14
+        left_name = attackers_name.rjust(max_len)
+        right_name = defenders_name.ljust(max_len)
+        return (f'# `⚔️`  {left_name}  VS  {right_name}  `🛡️`')
+
+    async def process_api_data(self, conf):
+        url = conf["url"]
+        current_id = conf["id"]
+        server_name = conf["server_name"]
+
+        # Проверка канала
+        try:
+            channel = await self.bot.fetch_channel(config.WINRATE_CHANNEL_ID)
+        except disnake.NotFound:
+            print(f'Канал с айди {config.WINRATE_CHANNEL_ID} не существует.')
+            return
+        except disnake.Forbidden:
+            print(f'У бота нет прав на просмотр канала {config.WINRATE_CHANNEL_ID}.')
+            return
+        except Exception as e:
+            print(f'Ошибка при поиске канала: {e}')
             return
 
         try:
-            response = requests.get(URL, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10)
 
             if response.status_code == 200:
                 data = response.json()
-                result = data.get('result')
-                captures = result.get('captures')
+                match_result = data.get('result')
+                captures = match_result.get('captures')
 
                 for capt in captures:
                     id = str(capt.get("id")) # Айди матча в API, не капта
@@ -62,7 +75,7 @@ class WinrateMCL(commands.Cog):
                         attackers_id = str(capt.get("attackersId"))
                         defenders_id = str(capt.get("defendersId"))
                 
-                        if attackers_id == self.faraday_id or defenders_id == self.faraday_id:
+                        if attackers_id == current_id or defenders_id == current_id:
                             attackers_name = str(capt.get("attackersName"))
                             defenders_name = str(capt.get("defendersName"))
                             attackers_id = str(capt.get("attackersId"))
@@ -79,7 +92,7 @@ class WinrateMCL(commands.Cog):
                             start_time = msk_time.strftime("%H:%M") 
                             date = msk_time.strftime("%d.%m.%Y") 
 
-                            result = 'Победа' if winner == self.faraday_id else 'Поражение'
+                            capt_result = 'Победа' if winner == current_id else 'Поражение'
                             enemy = defenders_name if attackers_name.lower() == 'faraday' else attackers_name
 
                             attackers_kills = 0
@@ -103,7 +116,7 @@ class WinrateMCL(commands.Cog):
                                     defenders_count = len(players_list)
 
                                 # Статистика каждого игрока из семьи
-                                if family_id == self.faraday_id:
+                                if str(family_id) == current_id:
                                     for player in players_list:
                                         all_players.append(player)
                                         p_id = player.get("id")
@@ -114,35 +127,45 @@ class WinrateMCL(commands.Cog):
                                         p_familyId = str(player.get('familyId'))
 
                             # Формирование списка игроков по количеству убуийств
-                            top_kills = sorted(all_players, key=lambda x: x.get("kills"), reverse=True)
+                            top_kills = sorted(all_players, key=lambda x: (x.get("kills", 0), x.get("damage", 0)), reverse=True)
                             top_kills_list = []
                             for i, p in enumerate(top_kills, 1):
                                 line = f"{i}. {p.get('name')} #{p.get('id')} — {p.get('kills')} убийств {p.get('damage')} урона"
                                 top_kills_list.append(line)
 
-                            # file_to_send = disnake.File(images_path / 'sandy.webp', filename="sandy.webp")
-                            # attachment_url = "attachment://sandy.webp"
+                            file_name = config.MAP_IMAGES.get(selected_map_name) 
+                            file_to_send = None
+                            attachment_url = None
 
-                            # Отправка сообщения
-                            channel = self.bot.get_channel(CHANNEL_ID)
+                            # Проверка файла
+                            if file_name and (images_path / file_name).exists():
+                                file_to_send = disnake.File(images_path / file_name, filename=file_name)
+                                attachment_url = f"attachment://{file_name}"
+                            else:
+                                print(f"Изображение не найдено. Поиск в папке: {images_path.absolute()}")
+
+                            title_text = self.centered_title(attackers_name, defenders_name) # Текст заголовка
+
+                            # Формирование и отправка сообщения
                             await channel.send(
-                                # file=file_to_send, 
+                                file=file_to_send, 
                                 components=[                 
                                     ui.Container(
-                                        # ui.MediaGallery(disnake.MediaGalleryItem(attachment_url)),
-                                        ui.TextDisplay(f'# `⚔️`  {attackers_name}    VS    {defenders_name}  `🛡️`'),
+                                        # Если переменные будут None то сообщение бещопасно отправится
+                                        *( [ui.MediaGallery(disnake.MediaGalleryItem(attachment_url))] if attachment_url else [] ),
+                                        ui.TextDisplay(title_text),
                                         ui.TextDisplay(f'-# *{attackers_kills} убийств, {attackers_damage} урона, {attackers_count} игроков              {defenders_kills} убийств, {defenders_damage} урона, {defenders_count} игроков*'),
                                         ui.Separator(divider=False),
                                         ui.Separator(divider=False),
                                         ui.Separator(divider=True),
                                         ui.Separator(divider=False),
                                         ui.Separator(divider=False),
-                                        ui.TextDisplay(f'• **`🏆` Исход:** {result}'), 
+                                        ui.TextDisplay(f'• **`🏆` Исход:** {capt_result}'), 
                                         ui.TextDisplay(f'• **`🗺️` Карта:** {selected_map_name}'), 
-                                        ui.TextDisplay(f'• **`🌐` Сервер:** MCL'),
+                                        ui.TextDisplay(f'• **`🌐` Сервер:** {server_name}'),
                                         ui.TextDisplay(f'• **`🗓️` Дата:** {date}'),
                                         ui.TextDisplay(f'• **`🕐` Время начала:** {start_time}'),
-                                        accent_colour=disnake.Colour.green() if result == 'Победа' else disnake.Colour.red()
+                                        accent_colour=disnake.Colour.green() if capt_result == 'Победа' else disnake.Colour.red()
                                     ),
 
                                     ui.Container(
@@ -162,4 +185,4 @@ class WinrateMCL(commands.Cog):
             print(f'Проблема с подключением к API: {e}')
 
 def setup(bot: commands.Bot):
-    bot.add_cog(WinrateMCL(bot))
+    bot.add_cog(WinrateMemphis(bot))

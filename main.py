@@ -12,17 +12,19 @@ async def on_ready():
     print("Бот успешно запущен.")
 
 @bot.command()
-@commands.is_owner() # Только для владельца бота
-async def reload(ctx, extension: str):
+@commands.is_owner()
+
+async def r(ctx, extension: str):
+    await ctx.message.delete()
     try:
         bot.reload_extension(f"cogs.{extension}")
         await ctx.send(f"Модуль `{extension}` успешно перезагружен! ✅")
     except Exception as e:
-        await ctx.send(f"Ошибка при перезагрузке: `{e}` ❌")
+        await ctx.send(f"Ошибка при перезагрузке: `{e}`")
 
 # Автоматическая загрузка всех когов из папки cogs
 for filename in os.listdir("./cogs"):
-    # Проверяем, что это .py файл и он не начинается с подчеркивания (например, __init__.py)
+    # Проверяем, что это .py файл и он не начинается с подчеркивания
     if filename.endswith(".py") and not filename.startswith("__"):
         bot.load_extension(f"cogs.{filename[:-3]}")
         print(f"Загружен модуль: {filename[:-3]}")
