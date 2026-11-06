@@ -27,9 +27,9 @@ MAP_IMAGES = {
 
 CONFIGS = [
     {
-        "id": "20",
-        "url": "https://api.majestic-files.net/v1/ext/family-wars/RU19",
-        "server_name": "Memphis"
+        "id": "1006",
+        "url": "https://api.majestic-files.net/v1/ext/family-wars/RU18",
+        "server_name": "Orlando"
     },
     {
         "id": "6",
